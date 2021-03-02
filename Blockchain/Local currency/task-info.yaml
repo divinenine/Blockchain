@@ -1,0 +1,1219 @@
+type: edu
+custom_name: stage6
+files:
+- name: test/BlockchainTest.java
+  visible: false
+  text: |
+    import blockchain.Main;
+    import org.hyperskill.hstest.stage.StageTest;
+    import org.hyperskill.hstest.testcase.CheckResult;
+    import org.hyperskill.hstest.testcase.TestCase;
+
+    import java.util.ArrayList;
+    import java.util.List;
+    import java.util.stream.Collectors;
+
+
+    class BlockParseException extends Exception {
+        BlockParseException(String msg) {
+            super(msg);
+        }
+    }
+
+
+    class Block {
+
+        int id;
+        long timestamp;
+        long magic;
+        String hashprev;
+        String hash;
+
+        static Block parseBlock(String strBlock) throws BlockParseException {
+            if (strBlock.length() == 0) {
+                return null;
+            }
+
+            if (!(strBlock.contains("Block:")
+                && strBlock.contains("Timestamp:"))) {
+
+                return null;
+            }
+
+            Block block = new Block();
+
+            List<String> lines = strBlock
+                .lines()
+                .map(String::strip)
+                .filter(e -> e.length() > 0)
+                .collect(Collectors.toList());
+
+            if (lines.size() < 13) {
+                throw new BlockParseException("Every block should " +
+                    "contain at least 13 lines of data");
+            }
+
+            if (!lines.get(0).equals("Block:")) {
+                throw new BlockParseException("First line of every block " +
+                    "should be \"Block:\"");
+            }
+
+            if (!lines.get(1).startsWith("Created by")) {
+                throw new BlockParseException("Second line of every block " +
+                    "should start with \"Created by\"");
+            }
+
+            if (!lines.get(2).contains("gets 100 VC")) {
+                throw new BlockParseException("Third line of every block " +
+                    "should contain \"gets 100 VC\"");
+            }
+
+            if (!lines.get(3).startsWith("Id:")) {
+                throw new BlockParseException("4-th line of every block " +
+                    "should start with \"Id:\"");
+            }
+
+            String id = lines.get(3).split(":")[1]
+                .strip().replace("-", "");
+            boolean isNumeric = id.chars().allMatch(Character::isDigit);
+
+            if (!isNumeric) {
+                throw new BlockParseException("Id should be a number");
+            }
+
+            block.id = Integer.parseInt(id);
+
+
+
+            if (!lines.get(4).startsWith("Timestamp:")) {
+                throw new BlockParseException("5-th line of every block " +
+                    "should start with \"Timestamp:\"");
+            }
+
+            String timestamp = lines.get(4).split(":")[1]
+                .strip().replace("-", "");
+            isNumeric = timestamp.chars().allMatch(Character::isDigit);
+
+            if (!isNumeric) {
+                throw new BlockParseException("Timestamp should be a number");
+            }
+
+            block.timestamp = Long.parseLong(timestamp);
+
+
+            if (!lines.get(5).startsWith("Magic number:")) {
+                throw new BlockParseException("6-th line of every block " +
+                    "should start with \"Magic number:\"");
+            }
+
+            String magic = lines.get(5).split(":")[1]
+                .strip().replace("-", "");
+            isNumeric = magic.chars().allMatch(Character::isDigit);
+
+            if (!isNumeric) {
+                throw new BlockParseException("Magic number should be a number");
+            }
+
+            block.magic = Long.parseLong(magic);
+
+
+
+            if (!lines.get(6).equals("Hash of the previous block:")) {
+                throw new BlockParseException("7-th line of every block " +
+                    "should be \"Hash of the previous block:\"");
+            }
+
+            if (!lines.get(8).equals("Hash of the block:")) {
+                throw new BlockParseException("9-th line of every block " +
+                    "should be \"Hash of the block:\"");
+            }
+
+            String prevhash = lines.get(7).strip();
+            String hash = lines.get(9).strip();
+
+            if (!(prevhash.length() == 64 || prevhash.equals("0"))
+                || !(hash.length() == 64)) {
+
+                throw new BlockParseException("Hash length should " +
+                    "be equal to 64 except \"0\"");
+            }
+
+            block.hash = hash;
+            block.hashprev = prevhash;
+
+            if (!lines.get(10).startsWith("Block data:")) {
+                throw new BlockParseException("11-th line of every block " +
+                    "should start with \"Block data:\"");
+            }
+
+            return block;
+        }
+
+
+        static List<Block> parseBlocks(String output) throws BlockParseException {
+            String[] strBlocks = output.split("\n\n");
+
+            List<Block> blocks = new ArrayList<>();
+
+            for (String strBlock : strBlocks) {
+                Block block = parseBlock(strBlock.strip());
+                if (block != null) {
+                    blocks.add(block);
+                }
+            }
+
+            return blocks;
+        }
+    }
+
+    class Clue {
+        String zeros;
+        Clue(int n) {
+            zeros = "0".repeat(n);
+        }
+    }
+
+
+    public class BlockchainTest extends StageTest<Clue> {
+        public BlockchainTest() {
+            super(Main.class);
+        }
+
+        List<String> previousOutputs = new ArrayList<>();
+
+        @Override
+        public List<TestCase<Clue>> generate() {
+            return List.of(
+                new TestCase<>(),
+                new TestCase<>()
+            );
+        }
+
+        @Override
+        public CheckResult check(String reply, Clue clue) {
+
+            if (previousOutputs.contains(reply)) {
+                return new CheckResult(false,
+                    "You already printed this text in the previous tests");
+            }
+
+            previousOutputs.add(reply);
+
+            List<Block> blocks;
+            try {
+                blocks = Block.parseBlocks(reply);
+            } catch (BlockParseException ex) {
+                return new CheckResult(false, ex.getMessage());
+            } catch (Exception ex) {
+                return CheckResult.wrong("");
+            }
+
+            if (blocks.size() != 15) {
+                return new CheckResult(false,
+                    "In this stage you should output 15 blocks, found " + blocks.size());
+            }
+
+            for (int i = 1; i < blocks.size(); i++) {
+                Block curr = blocks.get(i - 1);
+                Block next = blocks.get(i);
+
+                if (curr.id + 1 != next.id) {
+                    return new CheckResult(false,
+                        "Id`s of blocks should increase by 1");
+                }
+
+                if (next.timestamp < curr.timestamp) {
+                    return new CheckResult(false,
+                        "Timestamp`s of blocks should increase");
+                }
+
+                if (!next.hashprev.equals(curr.hash)) {
+                    return new CheckResult(false, "Two hashes aren't equal, " +
+                        "but should");
+                }
+            }
+
+
+            return CheckResult.correct();
+        }
+    }
+  learner_created: false
+- name: src/blockchain/solution_stage4/Block.java
+  visible: true
+  text: |-
+    package blockchain.solution_stage4;
+
+
+    import java.io.Serializable;
+    import java.time.Duration;
+
+    public class Block implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        private final int minerId;
+        private final int id;
+        private final int proofLength;
+        private final int proofLengthState;
+        private final long timestamp;
+        private final Hash current;
+        private final Hash previous;
+        private int magicNumber;
+        private transient long generatingTime;
+        private Serializable data;
+
+        public Block(int minerId, int id, int proofLength, Hash hashOfPreviousBlock, int proofLengthState, Serializable data) {
+            this.minerId = minerId;
+            this.id = id;
+            this.proofLength = proofLength;
+            this.proofLengthState = proofLengthState;
+            this.data = data;
+            this.timestamp = System.currentTimeMillis();
+            this.previous = hashOfPreviousBlock;
+            this.current = hash();
+        }
+
+        private Hash hash() {
+            var start = System.currentTimeMillis();
+            try {
+                while (true) {
+                    magicNumber = (int) (Math.random() * Integer.MAX_VALUE);
+                    var hash = new Hash(getValues());
+                    if (hash.validate(proofLength, getValues())) {
+                        return hash;
+                    }
+                }
+            } finally {
+                var end = System.currentTimeMillis();
+                generatingTime = Duration.ofMillis(end - start).toSeconds();
+            }
+        }
+
+        private String getValues() {
+            return Integer.toString(magicNumber) +
+                    minerId +
+                    id +
+                    timestamp +
+                    data +
+                    (previous != null ? previous : 0);
+        }
+
+        private boolean validatePrevious(Hash previous) {
+            if (this.previous == null && previous == null) {
+                return true;
+            }
+            if (this.previous.equals(previous)) {
+                return true;
+            }
+            return false;
+        }
+
+        public Hash getHash() {
+            return current;
+        }
+
+        @Override
+        public String toString() {
+            var sb = new StringBuilder();
+            sb.append("Block:");
+            sb.append("\n");
+            sb.append("Created by miner # ");
+            sb.append(minerId);
+            sb.append("\n");
+            sb.append("Id: ");
+            sb.append(id);
+            sb.append("\n");
+            sb.append("Timestamp: ");
+            sb.append(timestamp);
+            sb.append("\n");
+            sb.append("Magic number: ");
+            sb.append(magicNumber);
+            sb.append("\n");
+            sb.append("Hash of the previous block:");
+            sb.append("\n");
+            sb.append(previous == null ? 0 : previous);
+            sb.append("\n");
+            sb.append("Hash of the block:");
+            sb.append("\n");
+            sb.append(current);
+            sb.append("\n");
+            sb.append("Block data:");
+            if (data == null) {
+                sb.append(" no messages");
+                sb.append("\n");
+            } else {
+                sb.append("\n");
+                sb.append(data);
+            }
+            sb.append("Block was generating for ");
+            sb.append(generatingTime);
+            sb.append(" seconds");
+            sb.append("\n");
+            sb.append(proofLengthState == 0
+                    ? "N stays the same"
+                    : proofLengthState < 0
+                    ? "N decreased to " + proofLength
+                    : "N increased to " + proofLength);
+            sb.append("\n");
+            return sb.toString();
+        }
+
+        public int getId() {
+            return id;
+        }
+
+        public void validate(Hash previous) {
+            if (!validatePrevious(previous)) {
+                return;
+            }
+            if (!current.validate(proofLength, getValues())) {
+                return;
+            }
+            throw new IllegalArgumentException(String.format("Block %s is not valid!", id));
+        }
+
+    }
+  learner_created: true
+- name: src/blockchain/solution_stage4/BlockChain.java
+  visible: true
+  text: |
+    package blockchain.solution_stage4;
+
+    import java.io.*;
+    import java.nio.file.Files;
+    import java.nio.file.Paths;
+    import java.time.Duration;
+    import java.util.ArrayDeque;
+    import java.util.Queue;
+    import java.util.Stack;
+
+    import static java.util.stream.Collectors.toList;
+
+    public class BlockChain implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        public static BlockChain load(String fileName) throws IOException, ClassNotFoundException {
+            BlockChain blockChain;
+            if (Files.exists(Paths.get(fileName))) {
+                try (var file = new FileInputStream(fileName);
+                     var buffer = new BufferedInputStream(file);
+                     var stream = new ObjectInputStream(buffer)) {
+
+                    blockChain = (BlockChain) stream.readObject();
+                    blockChain.validate();
+                }
+            } else {
+                blockChain = new BlockChain(fileName);
+            }
+            return blockChain;
+        }
+
+        private String fileName;
+        private final Stack<Block> blocks = new Stack<>();
+        private long lastBlockTime = System.currentTimeMillis();
+        private int proofLength = 0;
+        private int previousProofLength = 0;
+        private Queue<Message> pendingMessages = new ArrayDeque<>();
+
+        public BlockChain() {
+        }
+
+        public BlockChain(String fileName) {
+            this();
+            this.fileName = fileName;
+        }
+
+        private Hash getLastBlockHash() {
+            synchronized (blocks) {
+                return blocks.size() == 0 ? null : blocks.peek().getHash();
+            }
+        }
+
+        private boolean put(Block block) throws IOException {
+            synchronized (blocks) {
+                if (block.getId() == getNextBlockId()) {
+                    blocks.add(block);
+                    save();
+                    adjustProofLength();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private int getNextBlockId() {
+            synchronized (blocks) {
+                return blocks.size();
+            }
+        }
+
+        private void adjustProofLength() {
+            var idleTime = Duration.ofMillis(System.currentTimeMillis() - lastBlockTime);
+            lastBlockTime = System.currentTimeMillis();
+            if (idleTime.toSeconds() < 1) {
+                previousProofLength = proofLength;
+                proofLength++;
+            } else if (idleTime.toMinutes() > 1) {
+                previousProofLength = proofLength;
+                proofLength--;
+            }
+        }
+
+        private void save() throws IOException {
+            synchronized (blocks) {
+                synchronized (pendingMessages) {
+                    if (fileName == null) {
+                        return;
+                    }
+                    var path = Paths.get(fileName);
+                    if (Files.exists(path)) {
+                        Files.delete(path);
+                    }
+                    try (var file = new FileOutputStream(fileName);
+                         var buffer = new BufferedOutputStream(file);
+                         var stream = new ObjectOutputStream(buffer)) {
+                        stream.writeObject(this);
+                    }
+                }
+            }
+        }
+
+        private void validate() {
+            synchronized (blocks) {
+                if (!blocks.empty()) {
+                    blocks.get(0).validate(null);
+                    for (int i = 1; i < blocks.size(); i++) {
+                        var block = blocks.get(i);
+                        block.validate(blocks.get(i - 1).getHash());
+                    }
+                }
+            }
+        }
+
+        public Iterable<Block> blocks() {
+            synchronized (blocks) {
+                return blocks;
+            }
+        }
+
+        public void queueMessage(Message message) {
+            synchronized (pendingMessages) {
+                pendingMessages.add(message);
+            }
+        }
+
+        public boolean tryPutNewBlock(int minerId) throws IOException {
+            var blockId = getNextBlockId();
+            var previous = getLastBlockHash();
+            synchronized (pendingMessages) {
+                var block = new Block(
+                        minerId,
+                        blockId,
+                        proofLength,
+                        previous,
+                        Integer.compare(proofLength, previousProofLength),
+                        pendingMessages.isEmpty()
+                                ? null
+                                : new MessageList(pendingMessages.stream().collect(toList())));
+                var result = put(block);
+                if (result) {
+                    pendingMessages.clear();
+                }
+                return result;
+            }
+        }
+
+        public void setFileName(String fileName) {
+            this.fileName = fileName;
+        }
+    }
+  learner_created: true
+- name: src/blockchain/solution_stage4/Chatter.java
+  visible: true
+  text: |-
+    package blockchain.solution_stage4;
+
+    import java.util.UUID;
+    import java.util.concurrent.TimeUnit;
+
+    public class Chatter implements Runnable {
+        private BlockChain blockChain;
+        private String name;
+
+        public Chatter(BlockChain blockChain, String name) {
+            this.blockChain = blockChain;
+            this.name = name;
+        }
+
+        public Chatter(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    TimeUnit.MILLISECONDS.sleep(1);
+                    blockChain.queueMessage(new Message(name, UUID.randomUUID().toString()));
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+  learner_created: true
+- name: src/blockchain/solution_stage4/Hash.java
+  visible: true
+  text: |-
+    package blockchain.solution_stage4;
+
+    import java.io.Serializable;
+    import java.security.MessageDigest;
+
+    public class Hash implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        private final String hash;
+
+        public Hash(String text) {
+            this.hash = hash(text);
+        }
+
+        private String hash(String input) {
+            try {
+                var digest = MessageDigest.getInstance("SHA-256");
+                var hash = digest.digest(input.getBytes("UTF-8"));
+                var hexString = new StringBuilder();
+                for (var elem : hash) {
+                    var hex = Integer.toHexString(0xff & elem);
+                    if (hex.length() == 1) hexString.append('0');
+                    hexString.append(hex);
+                }
+                return hexString.toString();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        public boolean validate(int proofLength, String input) {
+            var proof = hash.substring(0, proofLength).replaceAll("0", "");
+            if (!"".equals(proof)) {
+                return false;
+            }
+            return hash.equals(hash(input));
+        }
+
+        @Override
+        public String toString() {
+            return hash;
+        }
+    }
+  learner_created: true
+- name: src/blockchain/solution_stage4/Main.java
+  visible: true
+  text: |+
+    package blockchain.solution_stage4;
+
+    import java.util.concurrent.Executors;
+    import java.util.concurrent.TimeUnit;
+
+    public class Main {
+        public static void main(String[] args) {
+            try {
+                var threadCount = Runtime.getRuntime().availableProcessors();
+                var executor = Executors.newFixedThreadPool(threadCount);
+                var blockChain = new BlockChain();
+                for (var i = 0; i < 5; i++) {
+                    executor.submit(new Miner(blockChain, i));
+                    executor.submit(new Chatter(blockChain, "Chatter " + i));
+                }
+                executor.shutdown();
+                executor.awaitTermination(1, TimeUnit.SECONDS);
+                var i = 0;
+                for (var block: blockChain.blocks()) {
+                    if (i++ == 5) {
+                        break;
+                    }
+                    System.out.println(block);
+                    System.out.println();
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+
+
+
+
+
+  learner_created: true
+- name: src/blockchain/solution_stage4/Message.java
+  visible: true
+  text: |-
+    package blockchain.solution_stage4;
+
+
+    import java.io.Serializable;
+
+    public class Message implements Serializable {
+        private final String from;
+        private String value;
+
+        public Message(String from, String value) {
+            this.from = from;
+            this.value = value;
+        }
+
+        @Override
+        public String toString() {
+            return from + ": " + value;
+        }
+    }
+  learner_created: true
+- name: src/blockchain/solution_stage4/MessageList.java
+  visible: true
+  text: |
+    package blockchain.solution_stage4;
+
+    import java.io.Serializable;
+    import java.util.List;
+
+    public class MessageList implements Serializable {
+        private final List<Message> messages;
+
+        public MessageList(List<Message> messages) {
+            this.messages = messages;
+        }
+
+        @Override
+        public String toString() {
+            var sb = new StringBuilder();
+            for (var message: messages) {
+                sb.append(message);
+                sb.append("\n");
+            }
+            return sb.toString();
+        }
+    }
+  learner_created: true
+- name: src/blockchain/solution_stage4/Miner.java
+  visible: true
+  text: |
+    package blockchain.solution_stage4;
+
+    import java.io.IOException;
+    import java.util.concurrent.TimeUnit;
+
+    public class Miner implements Runnable {
+
+        private final BlockChain blockChain;
+        private final int id;
+
+        public Miner(BlockChain blockChain, int id) {
+            this.blockChain = blockChain;
+            this.id = id;
+        }
+
+        @Override
+        public void run() {
+            try {
+                while (true) {
+                    blockChain.tryPutNewBlock(id);
+                    TimeUnit.MILLISECONDS.sleep(2);
+                }
+            } catch (IOException | InterruptedException e) {
+            }
+        }
+    }
+  learner_created: true
+- name: src/blockchain/Miner.java
+  visible: true
+  text: |
+    package blockchain;
+
+    import blockchain.solution_stage4.Message;
+    import blockchain.solution_stage4.MessageList;
+
+    import java.io.IOException;
+    import java.util.Random;
+    import java.util.UUID;
+    import java.util.concurrent.Callable;
+    import java.util.concurrent.CompletableFuture;
+
+    import static blockchain.Main.*;
+    import static java.util.stream.Collectors.toList;
+
+    public class Miner implements Callable<Block> {
+
+        private int id;
+
+
+        public int getId() {
+            return id;
+        }
+
+        public void setId(int id) {
+            this.id = id;
+        }
+
+
+        @Override
+        public Block call() throws Exception {
+            Block block = null;
+            String blockString = "";
+            try {
+            synchronized (pendingMessages) {
+                queueMessage(new Message("Bot " + id, UUID.randomUUID().toString()));
+                block = generateBlock(id);
+                pendingMessages.clear();
+            }
+
+              //  Thread.sleep(5000);
+            } catch (IOException  e) {
+                e.printStackTrace();
+            }
+            return block;
+        }
+
+        public Block generateBlock(int id) throws IOException {
+            StringBuilder blockString = new StringBuilder();
+            int complexity = Block.getComplexity();
+            StringBuilder sb = new StringBuilder();
+            sb.append("0".repeat(Math.max(0, complexity)));
+            Main.zeroNumString = sb.toString();
+            Block block = new Block(id, pendingMessages.isEmpty()
+                    ? null
+                    : new MessageList(pendingMessages.stream().collect(toList())));
+
+            if (!blockchain.isEmpty()) {
+                block.id = blockchain.getLast().getId() + 1;
+              //  System.out.println(blockchain.size());
+            }
+
+         //   blockString.append(blockchain.getLast());
+
+
+            try {
+                SerializationUtils.serialize(blockchain, Main.file.getAbsolutePath());
+                //      System.out.println("File saved.");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return block;
+
+        }
+
+    }
+  learner_created: true
+- name: src/blockchain/SerializationUtils.java
+  visible: true
+  text: |
+    package blockchain;
+
+    import java.io.*;
+
+    public class SerializationUtils {
+
+        /**
+         * Serialize the given object to the file
+         */
+        public static void serialize(Object obj, String fileName) throws IOException, FileNotFoundException {
+            FileOutputStream fos = new FileOutputStream(fileName);
+            BufferedOutputStream bos = new BufferedOutputStream(fos);
+            ObjectOutputStream oos = new ObjectOutputStream(bos);
+            oos.writeObject(obj);
+            oos.close();
+        }
+
+        /**
+         * Deserialize to an object from the file
+         */
+        public static Object deserialize(String fileName) throws IOException, ClassNotFoundException {
+            FileInputStream fis = new FileInputStream(fileName);
+            BufferedInputStream bis = new BufferedInputStream(fis);
+            ObjectInputStream ois = new ObjectInputStream(bis);
+            Object obj = ois.readObject();
+            ois.close();
+            return obj;
+        }
+
+    }
+  learner_created: true
+- name: src/blockchain/StringUtil.java
+  visible: true
+  text: |+
+    package blockchain;
+
+    import java.security.MessageDigest;
+
+    public class StringUtil {
+        /* Applies Sha256 to a string and returns a hash. */
+        public static String applySha256(String input){
+            try {
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                /* Applies sha256 to our input */
+                byte[] hash = digest.digest(input.getBytes("UTF-8"));
+                StringBuilder hexString = new StringBuilder();
+                for (byte elem: hash) {
+                    String hex = Integer.toHexString(0xff & elem);
+                    if(hex.length() == 1) hexString.append('0');
+                    hexString.append(hex);
+                }
+                return hexString.toString();
+            }
+            catch(Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+  learner_created: true
+- name: src/blockchain/Main.java
+  visible: true
+  text: |
+    package blockchain;
+
+    import blockchain.solution_stage4.Chatter;
+    import blockchain.solution_stage4.Message;
+
+    import java.io.File;
+    import java.io.IOException;
+    import java.util.*;
+    import java.util.concurrent.*;
+
+    public class Main {
+
+
+        static LinkedList<Block> blockchain = new LinkedList<>();
+        static String zeroNumString;
+        static File file;
+        static int testMsgId;
+       // static int poolSize = Runtime.getRuntime().availableProcessors();
+        static ExecutorService executorService = Executors.newFixedThreadPool(5);
+        static Queue<Message> pendingMessages = new ArrayDeque<>();
+        public static void main(String[] args) throws IOException, InterruptedException, ExecutionException {
+            file = new File("C:\\Users\\Major\\IdeaProjects\\Blockchain\\Blockchain\\task\\src\\blockchain\\blockchain.bcn");
+            try {
+                boolean createdNew = file.createNewFile();
+                if (createdNew) {
+               //     System.out.println("The file was successfully created.");
+                } else {
+                   blockchain = (LinkedList<Block>) SerializationUtils.deserialize(file.getAbsolutePath());
+             //      System.out.println(blockchain);
+              //      System.out.println("Reading from file...");
+                }
+            } catch (IOException | ClassNotFoundException e) {
+            //    System.out.println("Cannot create the file: " + file.getPath());
+            }
+
+           // List<Future<String>> listFuture = new ArrayList<>();
+
+            List<Callable<Block>> listMiners = new ArrayList<>();
+            for (int i = 1; i < 6; i++) {
+                Miner miner = new Miner();
+                miner.setId(i);
+                listMiners.add(miner);
+            }
+
+
+            for (int i = 0; i < 5; i++) {
+                StringBuilder sb = new StringBuilder();
+                Block resultBlock = executorService.invokeAny(listMiners);
+                blockchain.add(resultBlock);
+                sb.append(resultBlock.toString());
+
+                sb.append("Block data: ").append("\n").append(blockchain.getLast().getData());
+
+                long seconds = blockchain.getLast().getSeconds();
+                sb.append("Block was generating for ").append(seconds).append(" seconds").append("\n");
+                if (seconds < 10) {
+                    Block.increaseComplexity();
+                    sb.append("N was increased to ").append(Block.getComplexity()).append("\n");
+                } else if (seconds > 10 && seconds < 60) {
+                    sb.append("N stays the same");
+                } else if (seconds > 60) {
+                    Block.decreaseComplexity();
+                    sb.append("N was decreased to ").append(Block.getComplexity()).append("\n");
+                }
+
+
+                System.out.println(sb.toString());
+
+            }
+            executorService.shutdown();
+
+
+        }
+
+        public static void queueMessage(Message message) {
+            synchronized (pendingMessages) {
+                pendingMessages.add(message);
+            }
+        }
+
+
+
+        public static boolean validateBlockchain() {
+            boolean chainIsValid = true;
+            int id = blockchain.getLast().getId();
+            int counter = blockchain.size() - 1;
+            while (true) {
+                System.out.println(id);
+                if (id == 1) {
+                    break;
+                } else {
+                    String prevHash = blockchain.get(counter).getHashPrev();
+                    Block prevBlock = blockchain.get(counter - 1);
+                    String hash = prevBlock.getHash();
+                    if (!hash.equals(prevHash)) {
+                        chainIsValid = false;
+                        break;
+                    }
+                    id = prevBlock.getId();
+                    counter--;
+                }
+
+            }
+            return chainIsValid;
+        }
+
+
+    }
+  learner_created: true
+- name: src/blockchain/Block.java
+  visible: true
+  text: |
+    package blockchain;
+
+    import java.io.Serializable;
+    import java.time.Instant;
+    import java.util.Date;
+    import java.util.LinkedList;
+    import java.util.Random;
+    import java.util.concurrent.TimeUnit;
+
+    import static blockchain.Main.blockchain;
+    import static blockchain.Main.zeroNumString;
+
+    public class Block implements Serializable {
+
+       // static LinkedList<Block> blocks = new LinkedList<>();
+        public int id = 1;
+        private long timeStamp;
+       private String hash;
+       private String hashPrev;
+       private int magicNumber;
+       private long seconds;
+       private static int complexity = 0;
+       private int minerId;
+
+
+        private Serializable data;
+        public Serializable getData() {
+            return data;
+        }
+
+        public Block(int id, Serializable data) {
+           if (blockchain.isEmpty()) {
+                hashPrev = "0";
+                timeStamp = new Date().getTime();
+                hash = generateHash();
+               // message = "no messages";
+          //      blockchain.add(this);
+               this.data = null;
+
+            } else {
+                //this.id = blockchain.getLast().id + 1;
+                hashPrev = blockchain.getLast().hash;
+                timeStamp = new Date().getTime();
+                hash = generateHash();
+               this.data = data;
+          //     blockchain.add(this);
+            }
+
+           minerId = id;
+
+        }
+
+        public int getId() {
+            return id;
+        }
+
+        public String generateHash() {
+            long start = System.nanoTime();
+            Random magicNumberGen = new Random();
+            magicNumber = magicNumberGen.nextInt(Integer.MAX_VALUE);
+            String hash = StringUtil.applySha256(magicNumber + hashPrev + String.valueOf(id)
+                    + String.valueOf(timeStamp));
+            while (!hash.startsWith(zeroNumString)) {
+                magicNumber = magicNumberGen.nextInt(Integer.MAX_VALUE);
+                hash = StringUtil.applySha256(magicNumber + hashPrev + String.valueOf(id)
+                        + String.valueOf(timeStamp));
+          //     System.out.println("Magic: " + magicNumber);
+          //      System.out.println("Gen Hash: " + hash);
+            }
+            long stop = System.nanoTime();
+            long elapsedTime = stop - start;
+         //   double seconds = (double) (stop - start) / 1_000_000_000.0;
+           seconds = TimeUnit.SECONDS.convert(elapsedTime, TimeUnit.NANOSECONDS);
+
+
+
+            return hash;
+        }
+
+        public String getHash() {
+            return hash;
+        }
+
+        public long getSeconds() {
+            return seconds;
+        }
+
+        public String getHashPrev() {
+            return hashPrev;
+        }
+
+
+        @Override
+        public String toString() {
+
+            StringBuilder sb = new StringBuilder();
+
+            String block = "Block:\n" +
+                    "Created by miner #" + minerId + "\n" +
+                    "Id: " + String.valueOf(id) + "\n" +
+                    "Timestamp:" + String.valueOf(timeStamp) + "\n" +
+                    "Magic number:" + magicNumber + "\n" +
+                    "Hash of the previous block: " + "\n" + hashPrev + "\n" +
+                    "Hash of the block:" + "\n" + hash + "\n";
+
+
+            sb.append(block);
+
+
+
+            return sb.toString();
+
+
+        }
+
+        public static int getComplexity() {
+            return complexity;
+        }
+
+        public static void increaseComplexity() {
+            complexity++;
+        }
+        public static void decreaseComplexity() {
+            complexity--;
+        }
+
+        public void increaseId() {this.id = blockchain.getLast().getId() + 1; }
+    }
+  learner_created: true
+- name: src/blockchain/Recursive.java
+  visible: true
+  text: |+
+    package blockchain;
+
+    import java.util.Date;
+
+    public class Recursive {
+
+
+        public static void main(String[] args) {
+            BlockChain blockChain = new BlockChain();
+            blockChain.print();
+            for (int i = 0; i < 4; i++) {
+                BlockChain nextBlock = blockChain.generateBlock();
+                nextBlock.print();
+                blockChain = nextBlock;
+            }
+        }
+
+    }
+
+    class BlockChain {
+
+        private int id;
+        private String prevHash;
+        private BlockChain prevBlock;
+        long timeStamp = new Date().getTime();
+
+        BlockChain() {
+            prevHash = String.valueOf("0");
+            id = 1;
+        }
+
+        private BlockChain (String hash, int id, BlockChain block) {
+            this.prevHash = hash;
+            this.id = id + 1;
+            this.prevBlock = block;
+        }
+
+        String generateHash() {
+         return    StringUtil.applySha256(prevHash + id + timeStamp);
+        }
+
+        BlockChain generateBlock() {
+            String currentHash = generateHash();
+            return new BlockChain(currentHash, this.id, this);
+        }
+
+        void print() {
+            String output = "Block:" +
+                    "\nId: " + id +
+                    "\nTimestamp: " + timeStamp +
+                    "\nHash of the previous block:\n" + prevHash +
+                    "\nHash of the block:\n" + generateHash() +
+                    "\n";
+            System.out.println(output);
+
+
+        }
+
+        public BlockChain getPrevBlock() {
+            return prevBlock;
+        }
+
+        static boolean validate(BlockChain lastBlock) {
+            boolean chainIsValid = true;
+            int id = lastBlock.id;
+            while (true) {
+                System.out.println(id);
+                if (id == 1) {
+                    break;
+                } else {
+                    String prevHash = lastBlock.prevHash;
+                    BlockChain prevBlock = lastBlock.getPrevBlock();
+                    String hash = prevBlock.generateHash();
+                    if (!hash.equals(prevHash)) {
+                        chainIsValid = false;
+                        break;
+                    }
+                    id = prevBlock.id;
+                    lastBlock = prevBlock;
+                }
+
+            }
+            return chainIsValid;
+
+
+
+        }
+
+
+
+
+    }
+
+
+  learner_created: true
+feedback_link: https://hyperskill.org/projects/50/stages/276/implement
+status: Unchecked
+record: -1
